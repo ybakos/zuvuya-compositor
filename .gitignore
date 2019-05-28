@@ -1,3 +1,5 @@
 main
 *.o
 *.a
+build/
+subprojects/
