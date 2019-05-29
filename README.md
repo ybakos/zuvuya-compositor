@@ -131,7 +131,12 @@ instantiates a `wl_display` object, destroys it, logs a message, and exits.
 But what the heck is _wayland-server.h_ and where does it come from? What
 is Wayland, anyway?
 
-TODO: explanation. (and what about wayland-server-core.h?)
+TODO: explanation.
 
 ### Step 3
+
+TODO: wlr_backend. What is it, why do we need it, how to get one.
+
+Why do we need to configure our build with WLR_USE_UNSTABLE ? (We get a
+compilation error if we don't.)
 
