@@ -140,3 +140,6 @@ TODO: wlr_backend. What is it, why do we need it, how to get one.
 Why do we need to configure our build with WLR_USE_UNSTABLE ? (We get a
 compilation error if we don't.)
 
+### Step 4
+
+Starting the backend and running the display. A window appears!
