@@ -148,3 +148,6 @@ Starting the backend and running the display. A window appears!
 
 Initializing the display with a renderer.
 
+### Step 6
+
+Initialize the compositor and data device manager.
