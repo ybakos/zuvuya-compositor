@@ -1,11 +1,14 @@
 #include <wayland-server.h>
 #include <wlr/util/log.h>
 #include <wlr/backend.h>
+#include <wlr/render/wlr_renderer.h>
 
 int main(int argc, char** argv) {
   wlr_log_init(WLR_DEBUG, NULL);
   struct wl_display* display = wl_display_create();
   struct wlr_backend* backend = wlr_backend_autocreate(display, NULL);
+  struct wlr_renderer* renderer = wlr_backend_get_renderer(backend);
+  wlr_renderer_init_wl_display(renderer, display);
 
   wlr_backend_start(backend);
   wl_display_run(display);

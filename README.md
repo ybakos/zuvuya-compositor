@@ -143,3 +143,8 @@ compilation error if we don't.)
 ### Step 4
 
 Starting the backend and running the display. A window appears!
+
+### Step 5
+
+Initializing the display with a renderer.
+
