@@ -164,13 +164,12 @@ graphical environments don't consist of a single program drawing to the screen.
 Rather, each program draws its contents in a "window", which itself is
 represented as a chunk of memory.
 
-It is the job of a compositor to provide those chunks of memory to each
-individual program, then combine the contents of those chunks of memory
-together and send that composition of data to the framebuffer. This means that
-each program, running in its own process, must have a way of requesting a chunk
-of memory from the compositor, and must be able to inform the compositor that
-its "window" is ready to be composited. In addition, the client must somehow be
-made aware of input events, such as a mouse click.
+It is the job of a compositor to combine the contents of those chunks of
+memory owned by each individual program and send that composition of data to
+the framebuffer. This means that each program, running in its own process, must have a way of obtaining a chunk of memory to draw in, share that memory
+with the compositor, and must be able to inform the compositor that
+its "window" is ready to be composited. In addition, the client must somehow
+be made aware of input events, such as a mouse click.
 
 Let's see what it takes to create a program that can talk to a Wayland
 compositor, and circle back to our compositor, to see what it takes to
@@ -341,10 +340,32 @@ Q:
 Why does wl_registry_get_version return 0, even after I've done a roundtrip?
 Q: What are the two extra events from rountrip? One is done, what is the second?
 
-### Step 3
+### Step 3a
 
 Let's recap our original goal of displaying some graphics on the screen. In
-order to do this, we need some memory from the compositor. In order to get
+order to do this, we need some memory to draw on - but that memory must also
+be available to the server so that the compositor can do its job. The Wayland
+protocol provides the `struct wl_buffer` abstraction that encapsulates the
+chunk of memory that the client can draw on, and that the compositor can
+access.
+
+We'll need to talk to the operating system to allocate this shared memory
+using the standard POSIX shared memory API, and then use that memory to
+create our `struct wl_buffer`. Our current goal is to do the following,
+which we can add to `main`:
+
+```
+struct wl_buffer *buffer = create_buffer();
+```
+
+
+
+
+
+
+### Step N compositor
+
+In order to get
 this memory, our client will need a handle on the server compositor. The
 compositor object is a server-side "global", advertised by the registry. To
 get our handle, we'll want to modify our `wl_registry.global` event handler
@@ -392,13 +413,14 @@ All right, we've got a compositor. It's important to note that, while we
 describe the server as "a compositor", we're using that term in a more
 general sense. In a more specific sense, the `wl_compositor` is the component
 within our "compositor" that is truly responsible for combining the contents
-of multiple graphics surfaces into a single displayable output.
+of multiple surfaces into a single displayable output (the
+framebuffer).
 
-Now wait, what's a "surface?"
+But then, what is a "surface?"
 
 ### Step 4
 
-
+TODO Surfaces, attaching buffer to surface, etc.
 
 
 ---
