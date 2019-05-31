@@ -176,7 +176,7 @@ Let's see what it takes to create a program that can talk to a Wayland
 compositor, and circle back to our compositor, to see what it takes to
 communicate with these client programs.
 
-# Step 1
+### Step 1
 
 The very first thing a client needs to do is connect to a Wayland compositor,
 which is a server running in its own process. We can obtain a connection to
@@ -272,7 +272,7 @@ call before the call to `wl_display_disconnect`. To understand why the
 server never even receives the request, let's investigate the request and
 response machinery of the Wayland protocol and its API.
 
-### Part 2
+### Step 2
 
 Communication between a Wayland client and server is asynchronous. If this
 isn't familiar, you'll need to educate yourself a little about asynchronous
