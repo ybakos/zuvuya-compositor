@@ -21,7 +21,9 @@ int main(int argc, char** argv) {
   struct wl_display* display = wl_display_connect(NULL);
   struct wl_registry* registry = wl_display_get_registry(display);
   wl_registry_add_listener(registry, &registry_listener, NULL);
+  wl_display_roundtrip(display);
 
+  wl_registry_destroy(registry);
   wl_display_disconnect(display);
   return 0;
 }
