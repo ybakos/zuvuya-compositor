@@ -16,3 +16,6 @@ executable('main',
   'main.c',
   dependencies: [lib_wlroots]
 )
+
+lib_wayland = dependency('wayland-client')
+executable('client', 'client.c', dependencies: [lib_wayland])
