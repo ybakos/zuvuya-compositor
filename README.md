@@ -341,6 +341,66 @@ Q:
 Why does wl_registry_get_version return 0, even after I've done a roundtrip?
 Q: What are the two extra events from rountrip? One is done, what is the second?
 
+### Step 3
+
+Let's recap our original goal of displaying some graphics on the screen. In
+order to do this, we need some memory from the compositor. In order to get
+this memory, our client will need a handle on the server compositor. The
+compositor object is a server-side "global", advertised by the registry. To
+get our handle, we'll want to modify our `wl_registry.global` event handler
+such that, when we see the "compositor" global advertised, we can get our
+handle on the compositor.
+
+Let's add a global variable for a `struct wl_compositor *` and modify the
+`registry_handle_global` implementation to initialize this new compositor
+variable.
+
+```
+#include <string.h>
+// ...
+static const int COMPOSITOR_VERSION = 4;
+struct wl_compositor *compositor;
+
+static void registry_handle_global(void *data, struct wl_registry *registry,
+    uint32_t name, const char *interface, uint32_t version) {
+  printf("Got a registry.global event for %s, id %d, version %d\n",
+    interface, name, version);
+  if (strcmp(interface, wl_compositor_interface.name) == 0) {
+    compositor = wl_registry_bind(registry, name, &wl_compositor_interface,
+      COMPOSITOR_VERSION);
+  }
+}
+
+```
+
+And in `main`, let's check to be sure that `compositor` isn't `NULL` before
+continuing. We'll do a little explicit cleanup before the program exits, too.
+
+```
+  // ...
+  if (compositor == NULL) {
+    fprintf(stderr, "no wl_compositor obtained\n");
+    return EXIT_FAILURE;
+  }
+
+  wl_compositor_destroy(compositor);
+  wl_registry_destroy(registry);
+  // ...
+```
+
+All right, we've got a compositor. It's important to note that, while we
+describe the server as "a compositor", we're using that term in a more
+general sense. In a more specific sense, the `wl_compositor` is the component
+within our "compositor" that is truly responsible for combining the contents
+of multiple graphics surfaces into a single displayable output.
+
+Now wait, what's a "surface?"
+
+### Step 4
+
+
+
+
 ---
 
 # Old drafted content
