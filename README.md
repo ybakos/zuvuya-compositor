@@ -221,8 +221,63 @@ struct wl_registry* registry = wl_display_get_registry(display);
 // ...
 ```
 
+Notice how we're including `wayland-client-protocol.h`. The function
+`wl_display_get_registry` corresponds to the Wayland protocol message
+`display.get_registry`. This is indeed the first request sent from the client
+to the server. Now, if you read the protocol documentation for `get_registry`,
+you'll see that the next thing that happens is that the registry will
+automatically emit one event for each "global" object that the client has
+access to. It is "advertising" the availability of global objects that the
+client can obtain access to. If we bind an event handler to the registry, our
+client can do something upon receiving these events, such as obtaining a
+handle on the compositor object.
+
+Let's see what the initial events are by printing them to the console. We'll
+need to create a `wl_registry_listener` and add the listener to our
+`wl_registry` object. A `wl_registry_listener` is just a struct that has two
+function pointers. One function pointer is named `global`, and the other is
+named `global_remove`. These correspond directly with the names of the
+protocol events `wl_registry.global` and `wl_registry.global_remove`. In
+other words, when the server emits a `wl_registry.global` event, our client's
+`global` event handling function will be invoked.
+
+```
+#include <stdio.h>
+// ...
+static void registry_handle_global(void *data, struct wl_registry *registry,
+    uint32_t name, const char *interface, uint32_t version) {
+  printf("Got a registry.global event for %s id %d\n", interface, name);
+}
+
+static void registry_handle_global_remove(void *data, struct wl_registry *registry,
+    uint32_t name) {
+  printf("Got a registry.remove event for id %d\n", name);
+}
+
+static const struct wl_registry_listener registry_listener = {
+  .global = registry_handle_global,
+  .global_remove = registry_handle_global_remove
+};
+
+int main(int argc, char** argv) {
+// ...
+  wl_registry_add_listener(registry, &registry_listener, NULL);
+```
+
+If we build and run this, it won't appear to do anything. It may seem that
+this is because our program is exiting before it has received any events from
+the server. However, in fact, the server never even receives the
+`display.get_registry` request. You can prove this by putting a `sleep(5)`
+call before the call to `wl_display_disconnect`. To understand why the
+server never even receives the request, let's investigate the request and
+response machinery of the Wayland protocol and its API.
+
+### Part 2
 
 
+
+Q:
+Dispatch alone works, so then why is it better in this case to do a rountrip?
 
 
 ---
