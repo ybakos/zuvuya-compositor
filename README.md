@@ -156,28 +156,131 @@ Initialize the compositor and data device manager.
 
 ## Client I
 
-Now let's take a step back and think about what the client needs to do in order
-to get a window to appear on the screen. When a standalone program wants to
-draw graphics to the screen, it writes data to the framebuffer, which is the
-part of video RAM that represents the pixels of a physical screen. Our typical
-graphical environments don't consist of a single program drawing to the screen.
-Rather, each program draws its contents in a "window", which itself is
-represented as a chunk of memory.
+Now let's take a step back and think about what the client needs to do in
+order to get a window to appear on the screen. When a standalone program
+wants to draw graphics to the screen, it writes data to the framebuffer,
+which is the part of video RAM that represents the pixels of a physical
+screen. Our typical graphical environments don't consist of a single program
+drawing to the screen. Rather, each program appears in a "window", whose
+visual content is stored in a chunk of memory serving as a canvas of pixels.
 
 It is the job of a compositor to combine the contents of those chunks of
 memory owned by each individual program and send that composition of data to
-the framebuffer. This means that each program, running in its own process, must have a way of obtaining a chunk of memory to draw in, share that memory
+the framebuffer. This means that each program, running in its own process,
+must have a way of obtaining a chunk of memory to draw in, share that memory
 with the compositor, and must be able to inform the compositor that
 its "window" is ready to be composited. In addition, the client must somehow
 be made aware of input events, such as a mouse click.
 
 Let's see what it takes to create a program that can talk to a Wayland
-compositor, and circle back to our compositor, to see what it takes to
+compositor, and circle back to our server, to see what it takes to
 communicate with these client programs.
 
-TODO: meson.build changes (adding lib_wayland client dependency, compilation target, etc)
-
 ### Step 1
+
+Let's add a the file _client.c_ to our project containing a simple stub for
+`main`:
+
+```
+#include <stdlib.h>
+
+int main(int argc, char** argv) {
+  return EXIT_SUCCESS;
+}
+```
+
+We should also configure our build settings with a new `executable` target:
+
+```
+executable('client', 'client.c')
+```
+
+Consider our primary goal of displaying some graphics on the screen. In
+order to do this, we need some memory to draw on - but that memory must also
+be available to the server so that the compositor can do its job. One way of
+doing this involves asking the operating system to allocate this shared memory
+using the standard POSIX shared memory API.
+
+First, let's determine the size of our client's "window," which will inform
+how much memory we need.
+
+```
+// ...
+static const int WIDTH = 300;
+static const int HEIGHT = 300;
+static const in MEMORY_SIZE = 4 * WIDTH * HEIGHT;
+```
+
+Notice that `MEMORY_SIZE` is not just `WIDTH * HEIGHT`. While `WIDTH`
+and `HEIGHT` specifies our dimensions in pixels, each pixel consists of four
+bytes (32 bits). Because we'll be requesting the amount of memory we need in
+bytes, the total number of bytes we want is four bytes * the number of pixels.
+
+Ok, we know the size of the memory we need. Now, let's create the
+second thing we need: the memory itself. Using the POSIX shared memory API,
+the handle for the memory will be represented as a file descriptor, or "fd"
+for short. We're going to take a shortcut here, and use a simple abstraction
+we'll borrow from someone else, letting us obtain the fd in just one
+statement:
+
+```
+int fd = create_shm_file(MEMORY_SIZE);
+```
+
+Under the hood, the `create_shm_file` function uses `shm_open` to create and
+open a POSIX shared memory object. [A POSIX shared memory object is in effect a handle which can be used by unrelated processes to mmap(2) the same region of shared memory](http://man7.org/linux/man-pages/man3/shm_open.3.html).
+This is exactly what we want our "unrelated" server and client processes to be
+able to do.
+
+I'm providing _shm.h_ and _shm.c_ here in this repo already, which I've
+borrowed from [emersion](https://github.com/emersion/hello-wayland). To get
+this to build, you'll want to include the header,
+
+```
+#include <shm.h>
+```
+
+and modify your _meson.build_ configuration:
+
+```
+rt = meson.get_compiler('c').find_library('rt') # For open_shm, etc
+executable('client', ['client.c', 'shm.c'], dependencies: [rt])
+```
+
+Since we have some memory, let's write some data to it, thereby painting it
+with color data. Although we have an `fd` for the shared memory, this doesn't
+provide us an API to write data to the shared memory. To get this, we'll use
+`mmap`.
+
+```
+#include <sys/mman.h>
+// ...
+void * canvas = mmap(NULL, shm_size(), PROT_READ | PROT_WRITE, MAP_SHARED,
+  fd, 0);
+```
+
+You should [look up what `mmap` does](http://man7.org/linux/man-pages//man2/munmap.2.html), but in the end we now have a pointer in our
+program that represents the base address of the shared memory. Let's paint!
+
+```
+#include <stdint.h>
+// ...
+uint32_t* pixel = canvas;
+for (int i = 0; i < WIDTH * HEIGHT; ++i) {
+  *pixel++ = 0x6600ff; // Purple
+}
+```
+
+Our client has now obtained some shared memory, and painted to it. But how do
+we get this to appear on the screen? It takes multiple steps, that will
+include connecting to a Wayland _server_, obtaining a remote handle on the
+_compositor_, wrapping our memory in a _buffer_, attaching the buffer to a
+_surface_, and asking the compositor to incorporate the contents of the
+surface.
+
+Let's start with connecting to the server.
+
+### Step 2
 
 The very first thing a client needs to do is connect to a Wayland compositor,
 which is a server running in its own process. We can obtain a connection to
@@ -344,93 +447,7 @@ Q: What are the two extra events from rountrip? One is done, what is the second?
 
 ### Step 3
 
-Let's recap our original goal of displaying some graphics on the screen. In
-order to do this, we need some memory to draw on - but that memory must also
-be available to the server so that the compositor can do its job. One way of
-doing this involves asking the operating system to allocate this shared memory
-using the standard POSIX shared memory API.
-
-First, let's determine the size of our client's "window," which will inform
-how much memory we need.
-
-```
-// ...
-static const int WIDTH = 300;
-static const int HEIGHT = 300;
-```
-
-Next, let's define a function that expresses how many bytes of memory we need.
-
-```
-int shm_size() {
-  return 4 * WIDTH * HEIGHT;
-}
-
-```
-
-Notice that the `size` of memory is not just `WIDTH * HEIGHT`. While `WIDTH`
-and `HEIGHT` specifies our dimensions in pixels, each pixel consists of four
-bytes (32 bits). Because `size` returns a value in bytes, the total number of
-bytes we want is four bytes * the number of pixels.
-
-Ok, we know the size of the memory we need. Now, let's create the
-second thing we need: a file descriptor representing a handle on the
-the memory itself using the POSIX shared memory API. The memory itself will
-be represented as a file descriptor, or "fd" for short. We're going to take a
-shortcut here, and use a simple abstraction we'll borrow from someone else,
-letting us obtain the fd in just one statement:
-
-```
-int fd = create_shm_file(shm_size());
-```
-
-Under the hood, the `create_shm_file` function uses `shm_open` to create and
-open a POSIX shared memory object. [A POSIX shared memory object is in effect a handle which can be used by unrelated processes to mmap(2) the same region of shared memory](http://man7.org/linux/man-pages/man3/shm_open.3.html).
-This is exactly what we want our "unrelated" server and client processes to be
-able to do.
-
-I'm providing _shm.h_ and _shm.c_ here in this repo already, which I've
-borrowed from [emersion](https://github.com/emersion/hello-wayland). To get
-this to build, you'll want to include the header,
-
-```
-#include <shm.h>
-```
-
-and modify your _meson.build_ configuration:
-
-```
-rt = meson.get_compiler('c').find_library('rt') # For open_shm, etc
-executable('client', ['client.c', 'shm.c'], dependencies: [lib_wayland, rt])
-```
-
-Since we have some memory, let's write some data to it, thereby painting it
-with color data. Although we have an `fd` for the shared memory, this doesn't
-provide us an API to write data to the shared memory. To get this, we'll use
-`mmap`.
-
-```
-#include <sys/mman.h>
-// ...
-void * shm_data = mmap(NULL, shm_size(), PROT_READ | PROT_WRITE, MAP_SHARED,
-  fd, 0);
-```
-
-You should [look up what `mmap` does](http://man7.org/linux/man-pages//man2/munmap.2.html), but in the end we now have a pointer in our
-program that represents the base address of the shared memory. Let's paint!
-
-```
-uint32_t *pixel = shm_data;
-for (int i = 0; i < WIDTH * HEIGHT; ++i) {
-  *pixel++ = 0x6600ff;
-}
-```
-
-Our client has now obtained some shared memory, and painted to it.
-
-
-
- The Wayland
+The Wayland
 protocol provides the `struct wl_buffer` abstraction that encapsulates the
 chunk of memory that the client can draw on, and that the compositor can
 access.
