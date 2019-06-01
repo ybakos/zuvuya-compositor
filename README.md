@@ -342,11 +342,95 @@ Q:
 Why does wl_registry_get_version return 0, even after I've done a roundtrip?
 Q: What are the two extra events from rountrip? One is done, what is the second?
 
-### Step 3a
+### Step 3
 
 Let's recap our original goal of displaying some graphics on the screen. In
 order to do this, we need some memory to draw on - but that memory must also
-be available to the server so that the compositor can do its job. The Wayland
+be available to the server so that the compositor can do its job. One way of
+doing this involves asking the operating system to allocate this shared memory
+using the standard POSIX shared memory API.
+
+First, let's determine the size of our client's "window," which will inform
+how much memory we need.
+
+```
+// ...
+static const int WIDTH = 300;
+static const int HEIGHT = 300;
+```
+
+Next, let's define a function that expresses how many bytes of memory we need.
+
+```
+int shm_size() {
+  return 4 * WIDTH * HEIGHT;
+}
+
+```
+
+Notice that the `size` of memory is not just `WIDTH * HEIGHT`. While `WIDTH`
+and `HEIGHT` specifies our dimensions in pixels, each pixel consists of four
+bytes (32 bits). Because `size` returns a value in bytes, the total number of
+bytes we want is four bytes * the number of pixels.
+
+Ok, we know the size of the memory we need. Now, let's create the
+second thing we need: a file descriptor representing a handle on the
+the memory itself using the POSIX shared memory API. The memory itself will
+be represented as a file descriptor, or "fd" for short. We're going to take a
+shortcut here, and use a simple abstraction we'll borrow from someone else,
+letting us obtain the fd in just one statement:
+
+```
+int fd = create_shm_file(shm_size());
+```
+
+Under the hood, the `create_shm_file` function uses `shm_open` to create and
+open a POSIX shared memory object. [A POSIX shared memory object is in effect a handle which can be used by unrelated processes to mmap(2) the same region of shared memory](http://man7.org/linux/man-pages/man3/shm_open.3.html).
+This is exactly what we want our "unrelated" server and client processes to be
+able to do.
+
+I'm providing _shm.h_ and _shm.c_ here in this repo already, which I've
+borrowed from [emersion](https://github.com/emersion/hello-wayland). To get
+this to build, you'll want to include the header,
+
+```
+#include <shm.h>
+```
+
+and modify your _meson.build_ configuration:
+
+```
+rt = meson.get_compiler('c').find_library('rt') # For open_shm, etc
+executable('client', ['client.c', 'shm.c'], dependencies: [lib_wayland, rt])
+```
+
+Since we have some memory, let's write some data to it, thereby painting it
+with color data. Although we have an `fd` for the shared memory, this doesn't
+provide us an API to write data to the shared memory. To get this, we'll use
+`mmap`.
+
+```
+#include <sys/mman.h>
+// ...
+void * shm_data = mmap(NULL, shm_size(), PROT_READ | PROT_WRITE, MAP_SHARED,
+  fd, 0);
+```
+
+You should [look up what `mmap` does](http://man7.org/linux/man-pages//man2/munmap.2.html), but in the end we now have a pointer in our
+program that represents the base address of the shared memory. Let's paint!
+
+```
+uint32_t *pixel = shm_data;
+for (int i = 0; i < WIDTH * HEIGHT; ++i) {
+  *pixel++ = 0x6600ff;
+}
+```
+
+Our client has now obtained some shared memory, and painted to it.
+
+
+
+ The Wayland
 protocol provides the `struct wl_buffer` abstraction that encapsulates the
 chunk of memory that the client can draw on, and that the compositor can
 access.
@@ -378,69 +462,7 @@ memory, and the size of that memory. Let's work through creating those
 arguments one at a time, and then we'll use them to create the pool, and
 use the pool to create the buffer.
 
-First, let's determine the size of our client's "window," which will inform
-how much memory we need.
 
-```
-// ...
-static const int WIDTH = 300;
-static const int HEIGHT = 300;
-```
-
-Next, in `create_buffer` let's determine the amount of shared memory we need:
-
-```
-struct wl_buffer* create_buffer() {
-  int stride = WIDTH * 4;
-  int size = stride * height;
-}
-```
-
-Notice that the `size` of memory is not just `WIDTH * HEIGHT`. While `WIDTH`
-and `HEIGHT` specifies our dimensions in pixels, each pixel consists of four
-bytes (32 pixels). Because `size` is a value in bytes, the total number of
-bytes we want is four bytes * the number of pixels we want. But why did we
-calculate this in two statements, with this `stride` thing? Later, when
-allocating the buffer, we'll need to provide a piece of information known
-as stride. The _stride_ of a graphics buffer represents the number of bytes
-in one _row_ of a with * height sized buffer. This is one example of how
-a `wl_buffer` provides a more powerful abstraction than a raw chunk of memory. By knowing the stride, it knows that the second row of pixels in our
-window starts at byte 1200, and that the third row starts at byte 2400,
-and so on. You should investigate [this concept of stride in graphics](https://docs.microsoft.com/en-us/windows/desktop/medfound/image-stride).
-
-Ok, we know the size of the memory we need, which is one of the three
-arguments we need to invoke `wl_shm_create_pool`. Now, let's create the
-second argument we'll need: a file descriptor representing a handle on the
-the memory itself using the POSIX shared memory API. The memory itself will
-be represented as a file descriptor, or "fd" for short. We're going to take a
-shortcut here, and use a simple abstraction we'll borrow from someone else,
-letting us obtain the fd in just one statement in `create_buffer`:
-
-```
-int fd = create_shm_file(size);
-```
-
-Handily, we're passing our calculated `size` here, and we'll use `size` again
-when obtaining the `wl_shm_pool`. Under the hood, the `create_shm_file`
-function uses `shm_open` to create and open a POSIX shared memory object.
-[A POSIX shared memory object is in effect a handle which can be used by unrelated processes to mmap(2) the same region of shared memory](http://man7.org/linux/man-pages/man3/shm_open.3.html).
-This is exactly what we want our "unrelated" server and client processes to be
-able to do.
-
-I'm providing _shm.h_ and _shm.c_ here in this repo already, which I've
-borrowed from [emersion](https://github.com/emersion/hello-wayland). To get
-this to build, you'll want to include the header,
-
-```
-#include <shm.h>
-```
-
-and modify your _meson.build_ configuration:
-
-```
-rt = meson.get_compiler('c').find_library('rt') # For open_shm, etc
-executable('client', ['client.c', 'shm.c'], dependencies: [lib_wayland, rt])
-```
 
 Your client should build and run, despite not doing much. But, our
 `create_buffer` implementation now has a handle on our shared memory, and we
@@ -482,8 +504,18 @@ wl_shm_pool_destroy(pool);
 return buffer;
 ```
 
+The _stride_ of a graphics buffer represents the number of bytes
+in one _row_ of a with * height sized buffer. This is one example of how
+a `wl_buffer` provides a more powerful abstraction than a raw chunk of memory. By knowing the stride, it knows that the second row of pixels in our
+window starts at byte 1200, and that the third row starts at byte 2400,
+and so on. You should investigate [this concept of stride in graphics](https://docs.microsoft.com/en-us/windows/desktop/medfound/image-stride).
+
+
+
 ### Step 3b
 
+All right, we've got our `wl_buffer` object, but there is one more step to
+accomplish:
 
 
 

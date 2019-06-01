@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <wayland-client.h>
 #include <wayland-client-protocol.h>
 #include <shm.h>
@@ -28,15 +29,12 @@ static const struct wl_registry_listener registry_listener = {
   .global_remove = registry_handle_global_remove
 };
 
-struct wl_buffer* create_buffer() {
-  int stride = WIDTH * 4;
-  int size = stride * HEIGHT;
-  int fd = create_shm_file(size);
-  struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
-  struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool, 0, WIDTH, HEIGHT,
-    stride, WL_SHM_FORMAT_ARGB8888);
-  wl_shm_pool_destroy(pool);
-  return buffer;
+int stride() {
+  return WIDTH * 4;
+}
+
+int shm_size() {
+  return stride() * HEIGHT;
 }
 
 int main(int argc, char** argv) {
@@ -45,8 +43,19 @@ int main(int argc, char** argv) {
   wl_registry_add_listener(registry, &registry_listener, NULL);
   wl_display_roundtrip(display);
 
-  struct wl_buffer *buffer = create_buffer();
+  int fd = create_shm_file(shm_size());
+  void * shm_data = mmap(NULL, shm_size(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  uint32_t *pixel = shm_data;
+  for (int i = 0; i < WIDTH * HEIGHT; ++i) {
+    *pixel++ = 0x6600ff;
+  }
 
+  struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, shm_size());
+  struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool, 0, WIDTH, HEIGHT,
+    stride(), WL_SHM_FORMAT_ARGB8888);
+
+  wl_shm_pool_destroy(pool);
+  wl_buffer_destroy(buffer);
   wl_display_disconnect(display);
   return 0;
 }
