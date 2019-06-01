@@ -52,15 +52,28 @@ int main(int argc, char** argv) {
   }
 
   struct wl_display* display = wl_display_connect(NULL);
+  if (display == NULL) {
+    fprintf(stderr, "failed to create display\n");
+    return EXIT_FAILURE;
+  }
   struct wl_registry* registry = wl_display_get_registry(display);
   wl_registry_add_listener(registry, &registry_listener, NULL);
   wl_display_roundtrip(display);
+  if (shm == NULL) {
+    fprintf(stderr, "no wl_shm support\n");
+    return EXIT_FAILURE;
+  }
   struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, MEMORY_SIZE);
   struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool, 0, WIDTH, HEIGHT,
     STRIDE, WL_SHM_FORMAT_ARGB8888);
+  if (buffer == NULL) {
+    fprintf(stderr, "could not obtain a buffer\n");
+    return EXIT_FAILURE;
+  }
 
   wl_buffer_destroy(buffer);
   wl_shm_pool_destroy(pool);
+  wl_shm_destroy(shm);
   wl_registry_destroy(registry);
   wl_display_disconnect(display);
   close(fd);
