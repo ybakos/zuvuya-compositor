@@ -591,8 +591,27 @@ But then, what is a "surface?"
 
 ### Step 6
 
-TODO Surfaces, attaching buffer to surface, etc.
+A Wayland compositor does not manage windows, it manages surfaces. A _surface_
+is the primary abstraction that "wraps" a graphics buffer that clients draw
+to and that the compositor composites. Visually, you can think of a surface as
+a traditional "window," but this is entirely up to the display server. For
+example, the server could take a surface and paint it onto a three dimensional
+sphere. In addition, protocol extensions like xdg-shell may provide additional
+wrappers around the core Wayland surface, similar to subclassing or object
+composition.
 
+We've got a buffer, so lets obtain a surface from the compositor and attach
+the buffer to it.
+
+```
+struct wl_surface* surface = wl_compositor_create_surface(compositor);
+wl_surface_attach(surface, buffer, 0, 0);
+
+wl_surface_destroy(surface);
+// ...
+```
+
+TODO: explain. Dig into the bare minimums, including server-side.
 
 ---
 

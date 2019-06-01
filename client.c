@@ -83,6 +83,10 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  struct wl_surface* surface = wl_compositor_create_surface(compositor);
+  wl_surface_attach(surface, buffer, 0, 0);
+
+  wl_surface_destroy(surface);
   wl_compositor_destroy(compositor);
   wl_buffer_destroy(buffer);
   wl_shm_pool_destroy(pool);
