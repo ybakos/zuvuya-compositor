@@ -282,36 +282,43 @@ Let's start with connecting to the server.
 
 ### Step 2
 
-The very first thing a client needs to do is connect to a Wayland compositor,
-which is a server running in its own process. We can obtain a connection to
-the server with the function `wl_display_connect`. It takes one argument: the
-identifying name of the compositor. If we pass it `NULL`, it will attempt to
-determine the name of the compositor via the environment variable
+The very first thing a client needs to do is connect to a Wayland display
+server ("compositor"), running in its own separate process. We can obtain a
+connection to the server with the function `wl_display_connect`. It takes one
+argument: the identifying name of the server. If we pass it `NULL`, it will
+attempt to determine the name of the server via the environment variable
 `$WAYLAND_DISPLAY`.
 
 Our basic client might look like this:
 
 ```
+// ...
 #include <wayland-client.h>
 
 int main(int argc, char** argv) {
+  // ...
   struct wl_display* display = wl_display_connect(NULL);
 
   wl_display_disconnect(display);
-  return 0;
+  return EXIT_SUCCESS;
 }
-
 ```
 
-This program establishes a connection to the display server / compositor, and
-then closes that connection.
+This program establishes a connection to the display server, and then closes
+that connection.
 
-Now, the goal of the client is to obtain some memory to draw to, and in order
-for that memory to become part of the whole composited output, the client
-needs to use memory that the compositor provides. In order to get this memory,
-the client needs to start talking to the server through client-side proxies
-that correspond to their server-side counterparts. The initial, and "global,"
-objects available to the client are enumerated in a "registry."
+The first goal of the client is to provide the server with access to
+the shared memory the client had been drawing to, so that this "canvas" can
+become part of the whole composited output driven by the server. To
+accomplish this, the client needs to start talking to the server through
+client-side proxies that correspond to their server-side counterparts. Wayland
+is the wire between these client proxies and the server counterparts. Our
+client will send requests to the server, the server will send events to the
+client, and the client will use event handlers to specify what to do in
+response to the events it cares about.
+
+The initial, or "global," objects available to the client are enumerated in a
+"registry."
 
 Let's see what it takes to create a registry, so we can use it to get other
 objects.
@@ -320,21 +327,22 @@ objects.
 // ...
 #include <wayland-client-protocol.h>
 // ...
-
 struct wl_registry* registry = wl_display_get_registry(display);
+
+wl_registry_destroy(registry);
 // ...
 ```
 
 Notice how we're including `wayland-client-protocol.h`. The function
-`wl_display_get_registry` corresponds to the Wayland protocol message
-`display.get_registry`. This is indeed the first request sent from the client
-to the server. Now, if you read the protocol documentation for `get_registry`,
-you'll see that the next thing that happens is that the registry will
-automatically emit one event for each "global" object that the client has
-access to. It is "advertising" the availability of global objects that the
-client can obtain access to. If we bind an event handler to the registry, our
-client can do something upon receiving these events, such as obtaining a
-handle on the compositor object.
+`wl_display_get_registry` corresponds to the Wayland protocol request
+`wl_display.get_registry`. This is indeed the first request sent from the
+client to the server. Now, if you read the protocol documentation for
+`get_registry`, you'll see that the next thing that happens is that the
+registry will automatically emit one event for each "global" object that the
+client has access to. It is "advertising" the availability of global objects
+that the client can obtain access to. If we bind an event handler to the
+registry, our client can do something upon receiving these events, such as
+obtaining a handle on the compositor object.
 
 Let's see what the initial events are by printing them to the console. We'll
 need to create a `wl_registry_listener` and add the listener to our
@@ -376,7 +384,7 @@ call before the call to `wl_display_disconnect`. To understand why the
 server never even receives the request, let's investigate the request and
 response machinery of the Wayland protocol and its API.
 
-### Step 2
+### Step 3
 
 Communication between a Wayland client and server is asynchronous. If this
 isn't familiar, you'll need to educate yourself a little about asynchronous
