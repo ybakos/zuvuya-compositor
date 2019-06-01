@@ -456,43 +456,19 @@ Q: What are the two extra events from roundtrip? One is done, what is the second
 
 ### Step 4
 
-The Wayland protocol provides the `struct wl_buffer` abstraction that encapsulates the
-chunk of memory that the client can draw on, and that the compositor can
-access.
+Recall that our goal is to somehow share the client's "canvas" of memory
+with the server. The Wayland protocol provides the `wl_buffer`
+abstraction that encapsulates the chunk of memory that the client can draw
+on, and that the compositor can, somehow, access.
 
-We'll need to talk to the operating system to allocate this shared memory
-using the standard POSIX shared memory API, and then use that memory to
-create our `struct wl_buffer`. Our current goal is to do the following,
-which we can add to `main`:
-
-```
-struct wl_buffer *buffer = create_buffer();
-```
-
-And let's stub out this magic `create_buffer` function:
-
-```
-struct wl_buffer* create_buffer() {
-  return NULL;
-}
-```
-
-Now, in order to create a `struct wl_buffer`, we need a `struct wl_shm_pool`.
+In order to create a `struct wl_buffer`, we need a `struct wl_shm_pool`.
 The pool encapsulates the memory shared between the server and the client,
 from which we can obtain `struct wl_buffer` objects. In order to create a
-`struct wl_shm_pool`, we need to use the `wl_shm` global advertised by the
-registry, so we can invoke `wl_shm_create_pool`. In turn, this function
-expects three arguments: the `wl_shm`, a file descriptor for the shared
-memory, and the size of that memory. Let's work through creating those
-arguments one at a time, and then we'll use them to create the pool, and
-use the pool to create the buffer.
-
-
-
-Your client should build and run, despite not doing much. But, our
-`create_buffer` implementation now has a handle on our shared memory, and we
-now have the second of the three arguments necessary for invoking
-`wl_shm_create_pool`. Remember, `wl_shm_create_pool` requires a size, a file descriptor, and a `wl_shm` object.
+`struct wl_shm_pool`, we need to invoke `wl_shm_create_pool`. In turn, this
+function expects three arguments: a `struct wl_shm` object, the file
+descriptor for the shared memory, and the size of that memory. We already have
+the fd and the size, so let's obtain the `wl_shm` object, then create the
+pool, and use the pool to create the buffer.
 
 The `wl_shm` object is one of the core Wayland globals provided by the server
 and advertised by the registry. To get a handle on it, we need to declare a
@@ -512,21 +488,28 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
 }
 ```
 
-Our event handler will be invoked once for every `wl_registry.global` event,
-but right now we only care about the one related to `wl_shm`. When the handler
-gets invoked and the `interface` is `wl_shm`, we'll ask the registry to
+Remember, our event handler will be invoked once for every
+`wl_registry.global` event. But right now we only care about the one event
+advertising the existence of `wl_shm`. When the handler gets invoked and the
+`interface` is `wl_shm`, we'll
 
-We now have the three arguments we need to obtain our `wl_shm_pool`, and can
-invoke `wl_shm_create_pool` in our `create_buffer` function. We can then
-obtain our `wl_buffer`, as well.
+TODO (explain bind, interfaces, etc)
+
+We now have all three arguments we need to obtain our `wl_shm_pool`, and can
+invoke `wl_shm_create_pool`. We can then obtain our `wl_buffer`, as well.
 
 ```
 // ...
-struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
+static const int STRIDE = 4 * WIDTH;
+static const int MEMORY_SIZE = STRIDE * HEIGHT;
+// ...
+struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, MEMORY_SIZE);
 struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool, 0, WIDTH, HEIGHT,
-  stride, WL_SHM_FORMAT_ARGB8888);
+  STRIDE, WL_SHM_FORMAT_ARGB8888);
+
+wl_buffer_destroy(buffer);
 wl_shm_pool_destroy(pool);
-return buffer;
+// ...
 ```
 
 The _stride_ of a graphics buffer represents the number of bytes
@@ -535,9 +518,18 @@ a `wl_buffer` provides a more powerful abstraction than a raw chunk of memory. B
 window starts at byte 1200, and that the third row starts at byte 2400,
 and so on. You should investigate [this concept of stride in graphics](https://docs.microsoft.com/en-us/windows/desktop/medfound/image-stride).
 
+The second argument of `wl_shm_pool_create_buffer` is an offset, indicating
+our desired starting location of the buffer within the pool. There is more
+memory in the pool than is in the buffer, and we can obtain multiple buffers
+starting at different offsets. In this case, we'll have just one buffer, and
+it begins where the pool begins, with an offset of 0. The last argument
+specifies the "pixel format" of the buffer. We're just dumping bits into our
+shared memory, and the pixel format indicates the meaning of groups of bits.
+For example, the first byte in every four-byte clump might represent the red
+value of the pixel, or three bits might represent alpha transparency. There
+are [all kinds of pixel formats out there](https://github.com/torvalds/linux/blob/master/include/uapi/drm/drm_fourcc.h).
 
-
-### Step 3b
+### Step 5
 
 All right, we've got our `wl_buffer` object, but there is one more step to
 accomplish:

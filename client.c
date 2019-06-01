@@ -3,17 +3,25 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <string.h>
 #include <shm.h>
 #include <wayland-client.h>
 #include <wayland-client-protocol.h>
 
 static const int WIDTH = 300;
 static const int HEIGHT = 300;
-static const int MEMORY_SIZE = 4 * WIDTH * HEIGHT;
+static const int STRIDE = 4 * WIDTH;
+static const int MEMORY_SIZE = STRIDE * HEIGHT;
+
+static const int WL_SHM_INTERFACE_VERSION = 1;
+struct wl_shm *shm;
 
 static void registry_handle_global(void *data, struct wl_registry *registry,
     uint32_t name, const char *interface, uint32_t version) {
   printf("Got a registry.global event for %s id %d version %d\n", interface, name, version);
+  if (strcmp(interface, wl_shm_interface.name) == 0) {
+    shm = wl_registry_bind(registry, name, &wl_shm_interface, WL_SHM_INTERFACE_VERSION);
+  }
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
@@ -47,7 +55,12 @@ int main(int argc, char** argv) {
   struct wl_registry* registry = wl_display_get_registry(display);
   wl_registry_add_listener(registry, &registry_listener, NULL);
   wl_display_roundtrip(display);
+  struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, MEMORY_SIZE);
+  struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool, 0, WIDTH, HEIGHT,
+    STRIDE, WL_SHM_FORMAT_ARGB8888);
 
+  wl_buffer_destroy(buffer);
+  wl_shm_pool_destroy(pool);
   wl_registry_destroy(registry);
   wl_display_disconnect(display);
   close(fd);
