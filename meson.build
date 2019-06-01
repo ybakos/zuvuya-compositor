@@ -18,4 +18,7 @@ executable('main',
 )
 
 lib_wayland = dependency('wayland-client')
-executable('client', 'client.c', dependencies: [lib_wayland])
+# For shm
+rt = meson.get_compiler('c').find_library('rt')
+
+executable('client', ['client.c', 'shm.c'], dependencies: [lib_wayland, rt])

@@ -175,6 +175,8 @@ Let's see what it takes to create a program that can talk to a Wayland
 compositor, and circle back to our compositor, to see what it takes to
 communicate with these client programs.
 
+TODO: meson.build changes (adding lib_wayland client dependency, compilation target, etc)
+
 ### Step 1
 
 The very first thing a client needs to do is connect to a Wayland compositor,
@@ -358,6 +360,129 @@ which we can add to `main`:
 struct wl_buffer *buffer = create_buffer();
 ```
 
+And let's stub out this magic `create_buffer` function:
+
+```
+struct wl_buffer* create_buffer() {
+  return NULL;
+}
+```
+
+Now, in order to create a `struct wl_buffer`, we need a `struct wl_shm_pool`.
+The pool encapsulates the memory shared between the server and the client,
+from which we can obtain `struct wl_buffer` objects. In order to create a
+`struct wl_shm_pool`, we need to use the `wl_shm` global advertised by the
+registry, so we can invoke `wl_shm_create_pool`. In turn, this function
+expects three arguments: the `wl_shm`, a file descriptor for the shared
+memory, and the size of that memory. Let's work through creating those
+arguments one at a time, and then we'll use them to create the pool, and
+use the pool to create the buffer.
+
+First, let's determine the size of our client's "window," which will inform
+how much memory we need.
+
+```
+// ...
+static const int WIDTH = 300;
+static const int HEIGHT = 300;
+```
+
+Next, in `create_buffer` let's determine the amount of shared memory we need:
+
+```
+struct wl_buffer* create_buffer() {
+  int stride = WIDTH * 4;
+  int size = stride * height;
+}
+```
+
+Notice that the `size` of memory is not just `WIDTH * HEIGHT`. While `WIDTH`
+and `HEIGHT` specifies our dimensions in pixels, each pixel consists of four
+bytes (32 pixels). Because `size` is a value in bytes, the total number of
+bytes we want is four bytes * the number of pixels we want. But why did we
+calculate this in two statements, with this `stride` thing? Later, when
+allocating the buffer, we'll need to provide a piece of information known
+as stride. The _stride_ of a graphics buffer represents the number of bytes
+in one _row_ of a with * height sized buffer. This is one example of how
+a `wl_buffer` provides a more powerful abstraction than a raw chunk of memory. By knowing the stride, it knows that the second row of pixels in our
+window starts at byte 1200, and that the third row starts at byte 2400,
+and so on. You should investigate [this concept of stride in graphics](https://docs.microsoft.com/en-us/windows/desktop/medfound/image-stride).
+
+Ok, we know the size of the memory we need, which is one of the three
+arguments we need to invoke `wl_shm_create_pool`. Now, let's create the
+second argument we'll need: a file descriptor representing a handle on the
+the memory itself using the POSIX shared memory API. The memory itself will
+be represented as a file descriptor, or "fd" for short. We're going to take a
+shortcut here, and use a simple abstraction we'll borrow from someone else,
+letting us obtain the fd in just one statement in `create_buffer`:
+
+```
+int fd = create_shm_file(size);
+```
+
+Handily, we're passing our calculated `size` here, and we'll use `size` again
+when obtaining the `wl_shm_pool`. Under the hood, the `create_shm_file`
+function uses `shm_open` to create and open a POSIX shared memory object.
+[A POSIX shared memory object is in effect a handle which can be used by unrelated processes to mmap(2) the same region of shared memory](http://man7.org/linux/man-pages/man3/shm_open.3.html).
+This is exactly what we want our "unrelated" server and client processes to be
+able to do.
+
+I'm providing _shm.h_ and _shm.c_ here in this repo already, which I've
+borrowed from [emersion](https://github.com/emersion/hello-wayland). To get
+this to build, you'll want to include the header,
+
+```
+#include <shm.h>
+```
+
+and modify your _meson.build_ configuration:
+
+```
+rt = meson.get_compiler('c').find_library('rt') # For open_shm, etc
+executable('client', ['client.c', 'shm.c'], dependencies: [lib_wayland, rt])
+```
+
+Your client should build and run, despite not doing much. But, our
+`create_buffer` implementation now has a handle on our shared memory, and we
+now have the second of the three arguments necessary for invoking
+`wl_shm_create_pool`. Remember, `wl_shm_create_pool` requires a size, a file descriptor, and a `wl_shm` object.
+
+The `wl_shm` object is one of the core Wayland globals provided by the server
+and advertised by the registry. To get a handle on it, we need to declare a
+variable for it, and enhance our `wl_registry.global` event handler.
+
+```
+#include <string.h>
+// ...
+static const int WL_SHM_INTERFACE_VERSION = 1;
+struct wl_shm *shm;
+// ...
+static void registry_handle_global(void *data, struct wl_registry *registry,
+    uint32_t name, const char *interface, uint32_t version) {
+  if (strcmp(interface, wl_shm_interface.name) == 0) {
+    shm = wl_registry_bind(registry, name, &wl_shm_interface, WL_SHM_INTERFACE_VERSION);
+  }
+}
+```
+
+Our event handler will be invoked once for every `wl_registry.global` event,
+but right now we only care about the one related to `wl_shm`. When the handler
+gets invoked and the `interface` is `wl_shm`, we'll ask the registry to
+
+We now have the three arguments we need to obtain our `wl_shm_pool`, and can
+invoke `wl_shm_create_pool` in our `create_buffer` function. We can then
+obtain our `wl_buffer`, as well.
+
+```
+// ...
+struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
+struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool, 0, WIDTH, HEIGHT,
+  stride, WL_SHM_FORMAT_ARGB8888);
+wl_shm_pool_destroy(pool);
+return buffer;
+```
+
+### Step 3b
 
 
 
@@ -424,6 +549,9 @@ TODO Surfaces, attaching buffer to surface, etc.
 
 
 ---
+
+TODO going deeper:
+- wl_registry_bind, and interfaces (eg wl_shm_interface), proxies, etc
 
 # Old drafted content
 
