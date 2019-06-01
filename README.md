@@ -358,7 +358,8 @@ other words, when the server emits a `wl_registry.global` event, our client's
 // ...
 static void registry_handle_global(void *data, struct wl_registry *registry,
     uint32_t name, const char *interface, uint32_t version) {
-  printf("Got a registry.global event for %s id %d\n", interface, name);
+  printf("Got a registry.global event for %s id %d version %d\n", interface,
+    name, version);
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
@@ -391,7 +392,7 @@ isn't familiar, you'll need to educate yourself a little about asynchronous
 communication, event loops, and message queues. When we invoke
 `wl_display_get_registry`, the client does not immediately send the server
 a request. Instead, `wl_display_get_registry` adds the `display.get_registry`
-request to a buffer (queue?) of outbound requests that are ready to be sent
+request to a buffer (queue) of outbound requests that are ready to be sent
 to the server, and then it returns.
 
 In order to send the request to the server, our client needs to flush its
@@ -399,25 +400,26 @@ request buffer, resulting in the requests actually being sent to the server.
 We could invoke `wl_display_flush`, then wait in a loop until we see the
 initial registry events, sent from the server, arrive in the client event
 queue. We could then process, or "dispatch," the events in the queue, which
-would fire our registry event handlers. Instead, we can invoke
-`wl_display_dispatch`, which will do a few things for us:
+would fire our registry event handlers. Instead, we could invoke
+`wl_display_dispatch`, which would do a few things for us:
 
-* Flush the request buffer, sending all requests to the server.
+* Flush the request buffer, sending all requests to the server
 * Wait until there are events in the queue
 * Dispatch each event in the event queue
 
-However, there's a little danger here. How do we know that the last event
-in the event queue is the final event that the server has to send us? It
-would be great if we could send a 'DONE?' request to the server, and it
-would respond with a 'YEP, DONE' event. If only we could send such a request
-after our initial `display.get_registry` request. We would then know that,
-once we see the 'YEP, DONE' event in the event queue, that all of the events
-resulting from our `display.get_registry` request had been received, since
+However, there's a little uncertainty here. How would we know that the last
+event in the event queue is the final event that the server has to send us,
+in response to a particular client request? It would be great if we could
+send a 'DONE?' request to the server, and it would respond with a 'YEP, DONE'
+event. If only we could send such a request after our initial
+`wl_display.get_registry` request. We would then know that, once we see the
+'YEP, DONE' event in the event queue, that all of the events resulting from
+our `wl_display.get_registry` request had been received, since
 they would be enqueued before our 'YEP, DONE' event.
 
-The `display.sync` event does exactly this, and can be added to the request
+The `wl_display.sync` event does exactly this, and can be added to the request
 buffer with the function `wl_display_sync(display)`. It even returns a
-callback object, to which you can bind and event handler to specify what you
+callback object, to which you can bind an event handler to specify what you
 want to happen when the sync request/event roundtrip is complete.
 
 So, to recap, we need to:
@@ -427,18 +429,18 @@ So, to recap, we need to:
 * Flush the request buffer, sending the two requests to the server
 * Wait until there are events in the queue
 * Dispatch each event in the event queue
-* Check that our event queue has a `wl_display.done` event, so we know that
-  we received all of the `wl_registry.global` events
+* Listen for a `wl_callback.done` event, so we know that we received all of
+  the `wl_registry.global` events
 
 The function `wl_display_roundtrip` does this work for us. It enqueus the
 `wl_display.sync` request, uses `wl_display_dispatch` to flush the buffer
 and dispatch any events that arrive in the event queue, and it repeats this
-until it "sees" the `wl_display.done` event.
+until it "sees" the `wl_callback.done` event.
 
 Let's do all this work with one statement:
 
 ```
-   wl_display_roundtrip(display);
+wl_display_roundtrip(display);
 ```
 
 If you run and build now, you'll see our registry `global` event handler
@@ -449,14 +451,12 @@ event in the queue, allowing our event handlers to handle each event. To
 do this, we used `wl_display_roundtrip` to help ensure that all of the
 events that we care about have indeed been received.
 
-Q:
-Why does wl_registry_get_version return 0, even after I've done a roundtrip?
-Q: What are the two extra events from rountrip? One is done, what is the second?
+Q: Why does wl_registry_get_version return 0, even after I've done a roundtrip?
+Q: What are the two extra events from roundtrip? One is done, what is the second?
 
-### Step 3
+### Step 4
 
-The Wayland
-protocol provides the `struct wl_buffer` abstraction that encapsulates the
+The Wayland protocol provides the `struct wl_buffer` abstraction that encapsulates the
 chunk of memory that the client can draw on, and that the compositor can
 access.
 

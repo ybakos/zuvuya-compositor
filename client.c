@@ -13,7 +13,7 @@ static const int MEMORY_SIZE = 4 * WIDTH * HEIGHT;
 
 static void registry_handle_global(void *data, struct wl_registry *registry,
     uint32_t name, const char *interface, uint32_t version) {
-  printf("Got a registry.global event for %s id %d\n", interface, name);
+  printf("Got a registry.global event for %s id %d version %d\n", interface, name, version);
 }
 
 static void registry_handle_global_remove(void *data, struct wl_registry *registry,
@@ -46,6 +46,7 @@ int main(int argc, char** argv) {
   struct wl_display* display = wl_display_connect(NULL);
   struct wl_registry* registry = wl_display_get_registry(display);
   wl_registry_add_listener(registry, &registry_listener, NULL);
+  wl_display_roundtrip(display);
 
   wl_registry_destroy(registry);
   wl_display_disconnect(display);
