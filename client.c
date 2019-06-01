@@ -15,12 +15,17 @@ static const int MEMORY_SIZE = STRIDE * HEIGHT;
 
 static const int WL_SHM_INTERFACE_VERSION = 1;
 struct wl_shm *shm;
+static const int WL_COMPOSITOR_INTERFACE_VERSION = 4;
+struct wl_compositor *compositor;
 
 static void registry_handle_global(void *data, struct wl_registry *registry,
     uint32_t name, const char *interface, uint32_t version) {
   printf("Got a registry.global event for %s id %d version %d\n", interface, name, version);
   if (strcmp(interface, wl_shm_interface.name) == 0) {
     shm = wl_registry_bind(registry, name, &wl_shm_interface, WL_SHM_INTERFACE_VERSION);
+  } else if (strcmp(interface, wl_compositor_interface.name) == 0) {
+    compositor = wl_registry_bind(registry, name, &wl_compositor_interface,
+      WL_COMPOSITOR_INTERFACE_VERSION);
   }
 }
 
@@ -56,9 +61,11 @@ int main(int argc, char** argv) {
     fprintf(stderr, "failed to create display\n");
     return EXIT_FAILURE;
   }
+
   struct wl_registry* registry = wl_display_get_registry(display);
   wl_registry_add_listener(registry, &registry_listener, NULL);
   wl_display_roundtrip(display);
+
   if (shm == NULL) {
     fprintf(stderr, "no wl_shm support\n");
     return EXIT_FAILURE;
@@ -71,6 +78,12 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  if (compositor == NULL) {
+    fprintf(stderr, "no compositor support\n");
+    return EXIT_FAILURE;
+  }
+
+  wl_compositor_destroy(compositor);
   wl_buffer_destroy(buffer);
   wl_shm_pool_destroy(pool);
   wl_shm_destroy(shm);

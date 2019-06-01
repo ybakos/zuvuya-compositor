@@ -531,38 +531,33 @@ are [all kinds of pixel formats out there](https://github.com/torvalds/linux/blo
 
 ### Step 5
 
-All right, we've got our `wl_buffer` object, but there is one more step to
-accomplish:
+All right, we've got our `wl_buffer` object, and the next step is to 'attach'
+our buffer to a `wl_surface`. In order to get a surface, our client will need
+a handle on the server compositor.
 
-
-
-
-### Step N compositor
-
-In order to get
-this memory, our client will need a handle on the server compositor. The
-compositor object is a server-side "global", advertised by the registry. To
-get our handle, we'll want to modify our `wl_registry.global` event handler
-such that, when we see the "compositor" global advertised, we can get our
-handle on the compositor.
+The compositor object is another server-side "global", advertised by the
+registry. To get our handle, we'll want to modify our `wl_registry.global`
+event handler such that, when we see the "compositor" global advertised, we
+can get our handle on the compositor.
 
 Let's add a global variable for a `struct wl_compositor *` and modify the
 `registry_handle_global` implementation to initialize this new compositor
 variable.
 
 ```
-#include <string.h>
 // ...
-static const int COMPOSITOR_VERSION = 4;
+static const int WL_COMPOSITOR_INTERFACE_VERSION = 4;
 struct wl_compositor *compositor;
 
 static void registry_handle_global(void *data, struct wl_registry *registry,
     uint32_t name, const char *interface, uint32_t version) {
   printf("Got a registry.global event for %s, id %d, version %d\n",
     interface, name, version);
-  if (strcmp(interface, wl_compositor_interface.name) == 0) {
+  if (strcmp(interface, wl_shm_interface.name) == 0) {
+    shm = wl_registry_bind(registry, name, &wl_shm_interface, WL_SHM_INTERFACE_VERSION);
+  } else if (strcmp(interface, wl_compositor_interface.name) == 0) {
     compositor = wl_registry_bind(registry, name, &wl_compositor_interface,
-      COMPOSITOR_VERSION);
+      WL_COMPOSITOR_INTERFACE_VERSION);
   }
 }
 
@@ -584,15 +579,17 @@ continuing. We'll do a little explicit cleanup before the program exits, too.
 ```
 
 All right, we've got a compositor. It's important to note that, while we
-describe the server as "a compositor", we're using that term in a more
-general sense. In a more specific sense, the `wl_compositor` is the component
-within our "compositor" that is truly responsible for combining the contents
-of multiple surfaces into a single displayable output (the
+describe Wayland display servers as "compositors", we're using that term at a
+high level. We call Wayland display servers "compositors" because, unlike
+other architectures, a Wayland display server is also responsible for doing
+the compositing. In a more specific sense, the `wl_compositor` is the
+component within our "compositor" that is truly responsible for combining the
+contents of multiple surfaces into a single displayable output (the
 framebuffer).
 
 But then, what is a "surface?"
 
-### Step 4
+### Step 6
 
 TODO Surfaces, attaching buffer to surface, etc.
 
