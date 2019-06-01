@@ -642,3 +642,4 @@ might look like this:
 
 ```
 
+(c) 2019 Yong Joseph Bakos. All rights reserved.
