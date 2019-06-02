@@ -7,6 +7,7 @@
 #include <shm.h>
 #include <wayland-client.h>
 #include <wayland-client-protocol.h>
+#include <xdg-shell-client-protocol.h>
 
 static const int WIDTH = 300;
 static const int HEIGHT = 300;
@@ -17,6 +18,8 @@ static const int WL_SHM_INTERFACE_VERSION = 1;
 struct wl_shm *shm;
 static const int WL_COMPOSITOR_INTERFACE_VERSION = 4;
 struct wl_compositor *compositor;
+static const int XDG_WM_BASE_INTERFACE_VERSION = 2;
+struct xdg_wm_base *xdg_wm_base;
 
 static void registry_handle_global(void *data, struct wl_registry *registry,
     uint32_t name, const char *interface, uint32_t version) {
@@ -26,6 +29,9 @@ static void registry_handle_global(void *data, struct wl_registry *registry,
   } else if (strcmp(interface, wl_compositor_interface.name) == 0) {
     compositor = wl_registry_bind(registry, name, &wl_compositor_interface,
       WL_COMPOSITOR_INTERFACE_VERSION);
+  } else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
+    xdg_wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface,
+      XDG_WM_BASE_INTERFACE_VERSION);
   }
 }
 

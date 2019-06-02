@@ -612,6 +612,121 @@ wl_surface_destroy(surface);
 ```
 
 TODO: explain. Dig into the bare minimums, including server-side.
+TODO: get server to render plain ol wl_surface.
+
+Returning to client, with motivation for xdg shell.
+
+### Step 7
+
+If our client is to create `xdg_surface` objects, we'll need to obtain an
+`xdg_wm_base` object and invoke `xdg_wm_base_get_xdg_surface`. The
+`xdg_wm_base` is a global advertised by the registry, so lets add a global
+`xdg_wm_base` variable and enhance our registry `global` event handler to
+grab a hold of the object when the corresponding event is fired.
+
+```
+// ...
+static const int XDG_WM_BASE_INTERFACE_VERSION = 2;
+struct xdg_wm_base *xdg_wm_base;
+// ...
+  } else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
+    xdg_wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface,
+      XDG_WM_BASE_INTERFACE_VERSION);
+  }
+}
+```
+
+If you build this, we'll get a failure due to some undefined types defined
+in a header file for the xdg-shell client protocol. Let's include it.
+
+```
+#include <xdg-shell-client-protocol.h>
+```
+
+And if you build this, we'll get a different kind of failure, notifying us
+that the header file doesn't exist. Furthermore, this header file does not
+really exist anywhere, such as in a library or package installation. We must
+generate this header file using two tools: _wayland-scanner_ and
+_xdg-shell.xml_, the xdg-shell protocol specification xml file.
+
+While we've been thinking of Wayland as a library, Wayland itself is only a
+protocol, documented by its creators and contributors in an XML file. We have
+actually been using a defacto C library that provides an API around the
+Wayland protocol. When we "build and install Wayland," we are building and
+installing a C library that presents us with an API for the Wayland protocol.
+There are, in fact, "missing" header files in the Wayland source tree. These
+header files are generated during the build step, and the build script uses
+an executable utility, known as _wayland-scanner_, that parses the protocol
+XML and generates the header and source files for our API.
+
+While we get this "for free" when building and installing Wayland, we are not
+as lucky with other protocols, such as xdg-shell. This and other protocols
+exist in the separate _wayland-protocols_ repository. When we build and
+"install" the protocols, we are merely copying the various protocol xml files
+to, say, _/usr/share/wayland-protocols/_.
+
+To do this, we could manually run two commands:
+
+```
+wayland-scanner client-header /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml ./xdg-shell-client-protocol.h
+wayland-scanner private-code /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml ./xdg-shell-client-protocol.c
+```
+
+These two commands would generate the _xdg-shell-client-protocol.h_ header and
+the _xdg-shell.c_ source file, storing them locally in our own source tree. We
+could do this and move on, but let's automate this step by enhancing our build
+configuration.
+
+```
+cmd = run_command('pkg-config', 'wayland-protocols', '--variable=pkgdatadir')
+if (cmd.returncode() != 0)
+  message('pkg-config could not find a path to wayland-scanner')
+  error(cmd.stderr())
+endif
+XDG_SHELL_PROTOCOL_XML_PATH = cmd.stdout().strip() + '/stable/xdg-shell/xdg-shell.xml'
+
+cmd = run_command('pkg-config', '--variable=wayland_scanner', 'wayland-scanner')
+if (cmd.returncode() != 0)
+  message('pkg-config could not find a path to wayland-scanner')
+  error(cmd.stderr())
+endif
+WAYLAND_SCANNER = cmd.stdout().strip()
+
+cmd = run_command(WAYLAND_SCANNER,
+  'client-header',
+  XDG_SHELL_PROTOCOL_XML_PATH,
+  'xdg-shell-client-protocol.h'
+)
+if (cmd.returncode() != 0)
+  message('Wayland scanner could not generate the xdg xhell header file.')
+  error(cmd.stderr())
+endif
+
+cmd = run_command(WAYLAND_SCANNER, 'private-code', XDG_SHELL_PROTOCOL_XML_PATH, 'xdg-shell-client-protocol.c')
+if (cmd.returncode() != 0)
+  message('Wayland scanner could not generate the xdg xhell source file.')
+  error(cmd.stderr())
+endif
+
+executable('client',
+  ['client.c', 'shm.c', 'xdg-shell-client-protocol.c'],
+  dependencies: [lib_wayland, rt]
+)
+
+```
+
+We can now run `meson build --reconfigure` and `ninja -C build`, and our
+toolchain will generate the necessary xdg-shell header and source files. We
+also are including the _xdg-shell-client-protocol.c_ as one of the compilation
+units in our `executable` config.
+
+Now that we have our `xdg_wm_base` object, and we can return to our task of
+creating an `xdg_surface`.
+
+### Step 8
+
+
+
 
 ---
 
