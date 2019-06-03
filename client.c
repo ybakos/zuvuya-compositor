@@ -92,7 +92,13 @@ int main(int argc, char** argv) {
   struct wl_surface* surface = wl_compositor_create_surface(compositor);
   wl_surface_attach(surface, buffer, 0, 0);
 
+  struct xdg_surface* xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
+  struct xdg_toplevel *xdg_toplevel= xdg_surface_get_toplevel(xdg_surface);
+
+  xdg_toplevel_destroy(xdg_toplevel);
+  xdg_surface_destroy(xdg_surface);
   wl_surface_destroy(surface);
+  xdg_wm_base_destroy(xdg_wm_base);
   wl_compositor_destroy(compositor);
   wl_buffer_destroy(buffer);
   wl_shm_pool_destroy(pool);

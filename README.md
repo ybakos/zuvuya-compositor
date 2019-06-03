@@ -619,8 +619,15 @@ Returning to client, with motivation for xdg shell.
 ### Step 7
 
 If our client is to create `xdg_surface` objects, we'll need to obtain an
-`xdg_wm_base` object and invoke `xdg_wm_base_get_xdg_surface`. The
-`xdg_wm_base` is a global advertised by the registry, so lets add a global
+`xdg_wm_base` object and invoke `xdg_wm_base_get_xdg_surface`. From the documentation:
+
+The `xdg_wm_base` interface is exposed as a global object enabling clients
+to turn their wl_surfaces into windows in a desktop environment. It
+defines the basic functionality needed for clients and the compositor to
+create windows that can be dragged, resized, maximized, etc, as well as
+creating transient windows such as popup menus.
+
+The`xdg_wm_base` is a global advertised by the registry, so lets add a global
 `xdg_wm_base` variable and enhance our registry `global` event handler to
 grab a hold of the object when the corresponding event is fired.
 
@@ -634,6 +641,14 @@ struct xdg_wm_base *xdg_wm_base;
       XDG_WM_BASE_INTERFACE_VERSION);
   }
 }
+```
+
+And down in `main`,
+
+```
+// ...
+xdg_wm_base_destroy(xdg_wm_base);
+// ...
 ```
 
 If you build this, we'll get a failure due to some undefined types defined
@@ -720,12 +735,49 @@ toolchain will generate the necessary xdg-shell header and source files. We
 also are including the _xdg-shell-client-protocol.c_ as one of the compilation
 units in our `executable` config.
 
+TODO: talk about interfaces, proxies, etc. How it all works.
+
 Now that we have our `xdg_wm_base` object, and we can return to our task of
 creating an `xdg_surface`.
 
 ### Step 8
 
+Let's obtain an `xdg_surface`:
 
+```
+struct xdg_surface* xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
+
+xdg_surface_destroy(xdg_surface);
+```
+
+Here we are instantiating an `xdg_surface`, by passing the factory function
+`xdg_wm_base_get_xdg_surface` our `wl_surface` object. The `xdg_surface`
+essentially wraps the `wl_surface`, providing a base set of functionality
+required to construct user interface elements requiring management by the
+compositor, such as windows, menus, and toolbars. The types of functionality
+are split into xdg_surface _roles_.
+
+However, creating an `xdg_surface` does not set the role for a `wl_surface`.
+In order to really have an `xdg_surface`, the client must create a
+role-specific object. So we need to "wrap" our `xdg_surface` in more specific
+surface, which will provide our `wl_surface` a role.
+
+The kind of surface we'll use is an `xdg_toplevel` surface. This enables the
+surface surface to set window-like properties such as maximize, fullscreen,
+and minimize, and set application-specific metadata like title and id.
+
+```
+// ...
+struct xdg_toplevel* toplevel = xdg_surface_get_toplevel(xdg_surface);
+
+xdg_toplevel_destroy(toplevel);
+```
+
+We now have a toplevel surface with enough information to enable the
+compositor to display it. But how do we get the compositor to display our
+window?
+
+### Step 9
 
 
 ---
