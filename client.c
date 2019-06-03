@@ -99,8 +99,6 @@ int main(int argc, char** argv) {
   }
 
   struct wl_surface* surface = wl_compositor_create_surface(compositor);
-  wl_surface_attach(surface, buffer, 0, 0);
-
   struct xdg_surface* xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
   struct xdg_toplevel *xdg_toplevel= xdg_surface_get_toplevel(xdg_surface);
 
@@ -108,6 +106,13 @@ int main(int argc, char** argv) {
 
   wl_surface_commit(surface);
   wl_display_roundtrip(display);
+
+  wl_surface_attach(surface, buffer, 0, 0);
+  wl_surface_commit(surface);
+
+  while (wl_display_dispatch(display) != -1) {
+    // watch and stare
+  }
 
   xdg_toplevel_destroy(xdg_toplevel);
   xdg_surface_destroy(xdg_surface);

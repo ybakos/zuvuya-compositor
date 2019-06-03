@@ -834,6 +834,68 @@ surface has been configured and is ready for rendering.
 
 But, when we run this, we still see the same error.
 
+### Step 10
+
+The reason we're seeing the error is due to an order of events. We should
+not be attaching the buffer to the surface until after the initial configure
+event. To fix this, let's move our prior `wl_surface_attach` invocation down
+after the initial commit and roundtrip. The entire sequence of surface
+creation and configuration should like this:
+
+```
+ struct wl_surface* surface = wl_compositor_create_surface(compositor);
+ struct xdg_surface* xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base,
+     surface);
+ struct xdg_toplevel *xdg_toplevel= xdg_surface_get_toplevel(xdg_surface);
+
+ xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
+
+ wl_surface_commit(surface);
+ wl_display_roundtrip(display);
+
+ wl_surface_attach(surface, buffer, 0, 0);
+```
+
+Now that we've attached the buffer to the surface here, let's send a `commit`.
+Remember, if we don't send the commit, the compositor will still be displaying
+a current buffer, without our `wl_buffer` attached, while our intended
+`wl_buffer` is attached to the pending buffer. (TODO: revise).
+
+```
+wl_surface_commit(surface);
+```
+
+Next, let's be sure these queued requests are finally sent to the server:
+
+```
+wl_display_roundtrip(display);
+```
+
+When you build and run now you should see, if you stay alert, our window with
+its surface buffer contents appear and then disappear as our program exits.
+
+To keep things running, we're going to need a loop. One idiomatic way of
+doing this is to call `wl_display_dispatch` over and over again until it
+receives a signal of `-1`. Let's remove our previous `wl_display_roundtrip`
+call and replace it with this loop:
+
+```
+while (wl_display_dispatch(display) != -1) {
+  // stare at the screen
+}
+```
+
+This loop continuously flushes the client request queue and dispatches all
+the events in the event queue. The function blocks while the event queue is
+empty, too, waiting for new events to arrive.
+
+If you build and run now, you should see a window appear with the contents
+of our surface's buffer in it - a 300 x 300 purple square.
+
+### Step 11
+
+
+
 
 ---
 
