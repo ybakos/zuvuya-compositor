@@ -779,6 +779,61 @@ window?
 
 ### Step 9
 
+The compositor is responsible for rendering the contents of all of its client
+surfaces. But how does it know when to do this? If it alone continuously
+rendered the buffer for each surface, it would either be wasting its time
+when the contents of the buffer haven't changed, or, have no way of being
+"in sync" with the client, which will be updating its buffer contents
+independently in its own process.
+
+Furthermore, the compositor uses a concept known as double-buffering. The
+first buffer is the "current" one, rendered by the compositor. The second
+buffer is the "pending" one, which clients can draw on and otherwise modify
+its state.
+
+To inform a compositor to make the pending buffer the current one, and then
+render the contents of the new current buffer, a surface must communicate a
+"commit." Let's go ahead and try this out now:
+
+```
+wl_surface_commit(surface);
+wl_display_roundtrip(display);
+```
+
+When we build and run this, we'll see an error is logged, saying something
+about the surface never having been configured. We should recognize that
+mapping our `wl_surface` with `xdg_surface` and `xdg_toplevel` results in
+the compositor sending the client a `configure` event. This is the compositor
+telling the client, ok, get your surface ready for display, and then send
+me an acknowledgement letting me know that you're done.
+
+Our client needs to listen for `configure` events, and send an
+acknowledgement. Let's define an event handler.
+
+```
+static void xdg_surface_handle_configure(void *data,
+    struct xdg_surface *xdg_surface, uint32_t serial) {
+  xdg_surface_ack_configure(xdg_surface, serial);
+}
+
+static const struct xdg_surface_listener xdg_surface_listener = {
+  .configure = xdg_surface_handle_configure,
+};
+```
+
+Next, let's add the event handler to the xdg_surface
+
+```
+xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
+```
+
+Here we are defining an `xdg_surface_listener`, and adding the listener to
+our `xdg_surface`. Our `configure` handler will enqueue an `ack_configure`
+request to be sent to the server, which will let the server know that our
+surface has been configured and is ready for rendering.
+
+But, when we run this, we still see the same error.
+
 
 ---
 

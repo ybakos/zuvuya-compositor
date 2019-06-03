@@ -45,6 +45,15 @@ static const struct wl_registry_listener registry_listener = {
   .global_remove = registry_handle_global_remove
 };
 
+static void xdg_surface_handle_configure(void *data,
+    struct xdg_surface *xdg_surface, uint32_t serial) {
+  xdg_surface_ack_configure(xdg_surface, serial);
+}
+
+static const struct xdg_surface_listener xdg_surface_listener = {
+  .configure = xdg_surface_handle_configure
+};
+
 int main(int argc, char** argv) {
   int fd = create_shm_file(MEMORY_SIZE);
   if (fd < 0) {
@@ -95,10 +104,15 @@ int main(int argc, char** argv) {
   struct xdg_surface* xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
   struct xdg_toplevel *xdg_toplevel= xdg_surface_get_toplevel(xdg_surface);
 
+  xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
+
+  wl_surface_commit(surface);
+  wl_display_roundtrip(display);
+
   xdg_toplevel_destroy(xdg_toplevel);
   xdg_surface_destroy(xdg_surface);
-  wl_surface_destroy(surface);
   xdg_wm_base_destroy(xdg_wm_base);
+  wl_surface_destroy(surface);
   wl_compositor_destroy(compositor);
   wl_buffer_destroy(buffer);
   wl_shm_pool_destroy(pool);
