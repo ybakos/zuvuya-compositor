@@ -14,6 +14,9 @@ int main(int argc, char** argv) {
   wlr_compositor_create(display, renderer);
   wlr_data_device_manager_create(display);
 
+  const char *socket = wl_display_add_socket_auto(display);
+  wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);
+
   wlr_backend_start(backend);
   wl_display_run(display);
 

@@ -892,8 +892,63 @@ empty, too, waiting for new events to arrive.
 If you build and run now, you should see a window appear with the contents
 of our surface's buffer in it - a 300 x 300 purple square.
 
-### Step 11
+## Back to the Server
 
+Our client runs, but connects to the Wayland compositor that we are currently
+running. For example, if we're running Sway as our desktop environment, our
+client connects to Sway, and displays a tiled window within our desktop
+environment. What we'd like to do is run our server, and have our client connect
+to _it_, instead of our main desktop compositor.
+
+We're going to run our server, which will itself be displayed within our
+desktop environment, and our client will connect to our server, which will
+display the client contents. Client -> our server -> main desktop server.
+
+TODO: Why does running our compositor automatically connect to the main desktop
+compositor? How does it know to do this? Does it check for a WAYLAND_DISPLAY
+first and connect to it if it exists?
+
+How will our client know what server to connect to? In the Wayland environment,
+each running compositor defines an environment variable `WAYLAND_DISPLAY`, which
+stores an identifier like `wayland-0`. This is the default socket identifier for
+most Wayland compositors. So then, what is the socket identifier for our server?
+
+Well, it doesn't have a socket that it is listening to yet. So in fact, no
+client can connect to it. Let's use the Wayland API to create a socket and bind
+it to our display. In addition, let's log a message with the socket info and see
+what it says.
+
+```
+const char *socket = wl_display_add_socket_auto(display);
+wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);
+```
+
+If we build and run our server, it should still appear as a window within our
+main desktop compositor. When we inspect the log messages printed on the
+console, we see the following message:
+
+**[main.c: 18] Running Wayland compositor on WAYLAND_DISPLAY=wayland-1***
+
+Aha, that is the identifying name for the socket on which our server is
+listening, and we can use this information to tell our client to connect to
+our server. To do so, let's redefine the `WAYLAND_DISPLAY` environment variable
+when running our client. For example:
+
+```
+WAYLAND_DISPLAY=wayland-1 build/client
+```
+
+When we run this, without our server running, the client exits with a message
+telling us that it failed to create a display. Now, let's run our server first,
+then run the client.
+
+This time, we see that our client logs some information per its registry
+event handler, but then crashes. Let's investigate why, and see if this leads us
+to understand what the server needs to support for its clients.
+
+### Step 1
+
+TODO: comment out client lines until we find the cause of the crash.
 
 
 
