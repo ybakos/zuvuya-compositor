@@ -4,6 +4,7 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_xdg_shell.h>
 
 int main(int argc, char** argv) {
   wlr_log_init(WLR_DEBUG, NULL);
@@ -13,6 +14,8 @@ int main(int argc, char** argv) {
   wlr_renderer_init_wl_display(renderer, display);
   wlr_compositor_create(display, renderer);
   wlr_data_device_manager_create(display);
+
+  struct wlr_xdg_shell* xdg_shell = wlr_xdg_shell_create(display);
 
   const char *socket = wl_display_add_socket_auto(display);
   wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);

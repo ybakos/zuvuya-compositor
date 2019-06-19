@@ -12,11 +12,6 @@ add_project_arguments([
 # should ignore.
 add_project_arguments('-DWL_HIDE_DEPRECATED', language: 'c')
 
-executable('main',
-  'main.c',
-  dependencies: [lib_wlroots]
-)
-
 lib_wayland = dependency('wayland-client')
 # For shm
 rt = meson.get_compiler('c').find_library('rt')
@@ -41,15 +36,30 @@ cmd = run_command(WAYLAND_SCANNER,
   'xdg-shell-client-protocol.h'
 )
 if (cmd.returncode() != 0)
-  message('Wayland scanner could not generate the xdg xhell header file.')
+  message('Wayland scanner could not generate the xdg shell header file.')
   error(cmd.stderr())
 endif
 
-cmd = run_command(WAYLAND_SCANNER, 'private-code', XDG_SHELL_PROTOCOL_XML_PATH, 'xdg-shell-client-protocol.c')
+cmd = run_command(WAYLAND_SCANNER,
+  'server-header',
+  XDG_SHELL_PROTOCOL_XML_PATH,
+  'xdg-shell-protocol.h'
+)
 if (cmd.returncode() != 0)
-  message('Wayland scanner could not generate the xdg xhell source file.')
+  message('Wayland scanner could not generate the xdg shell header file.')
   error(cmd.stderr())
 endif
+
+cmd = run_command(WAYLAND_SCANNER, 'private-code', XDG_SHELL_PROTOCOL_XML_PATH, 'xdg-shell-protocol.c')
+if (cmd.returncode() != 0)
+  message('Wayland scanner could not generate the xdg shell source file.')
+  error(cmd.stderr())
+endif
+
+executable('main',
+  ['main.c', 'xdg-shell-protocol.c'],
+  dependencies: [lib_wlroots]
+)
 
 executable('client',
   ['client.c', 'shm.c', 'xdg-shell-client-protocol.c'],

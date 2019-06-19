@@ -3,4 +3,4 @@ main
 *.a
 build/
 subprojects/
-xdg-shell-client-protocol.*
+xdg-shell-*.*

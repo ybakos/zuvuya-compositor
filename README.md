@@ -961,7 +961,7 @@ and features.
 The problem is this line:
 
 ```
-  struct xdg_surface* xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
+struct xdg_surface* xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
 ```
 
 So let's add a null check here and exit if `xdg_wm_base` is `NULL`,
@@ -982,6 +982,56 @@ will exit rather than crash. This informs us of our next step: how to get our
 server to support the xdg-shell protocol, which provides the `xdg_wm_base`
 interface.
 
+### Step 2
+
+In our server, let's create a `wlr_xdg_shell`, which is a wrapper around the
+pure `xdg_shell` that wlroots helps us create.
+
+```
+struct wlr_xdg_shell* xdg_shell = wlr_xdg_shell_create(display);
+```
+
+Now, if we build this, we'll need to include the appropriate header from
+wlroots:
+
+```
+#include <wlr/types/wlr_xdg_shell.h>
+```
+
+Which in turn expects us to have generated the server header file
+_xdg-shell-protocol.h_, generated from the `server-header` option with
+_wayland-scanner_. Similar to what we did with our client, which depends on
+the xdg client header, we'll update our build config to generate the server
+header file.
+
+```
+cmd = run_command(WAYLAND_SCANNER,
+  'server-header',
+  XDG_SHELL_PROTOCOL_XML_PATH,
+  'xdg-shell-protocol.h'
+)
+if (cmd.returncode() != 0)
+  message('Wayland scanner could not generate the xdg shell header file.')
+  error(cmd.stderr())
+endif
+```
+
+And update the build config to include the xdg-shell protocol code when building
+the server:
+
+```
+executable('main',
+  ['main.c', 'xdg-shell-protocol.c'],
+  dependencies: [lib_wlroots]
+)
+```
+
+When we build and run our server now, and connect our client to it, we see that
+the client now successfully binds the `xdg_wm_base` object and does not exit.
+
+Unfortunately, our server is still not rendering our clients graphics content.
+
+### Step 3
 
 
 
