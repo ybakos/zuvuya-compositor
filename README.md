@@ -948,7 +948,40 @@ to understand what the server needs to support for its clients.
 
 ### Step 1
 
-TODO: comment out client lines until we find the cause of the crash.
+If we take the time to narrow down the cause of the crash, we'll see a feature
+that our client expects but the server does not support. For example, if you
+were to comment out all of the contents of _client.c_ `main`, and methodically
+uncomment the lines out, you'll find that:
+
+1. Our server registry only broadcasts support for a limited number of protocols
+and features.
+2. It crashes when assuming that `xdg_wm_base` has been obtained and invoking
+`xdg_wm_base_get_xdg_surface`.
+
+The problem is this line:
+
+```
+  struct xdg_surface* xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
+```
+
+So let's add a null check here and exit if `xdg_wm_base` is `NULL`,
+
+```
+if (xdg_wm_base == NULL) {
+  fprintf(stderr, "no xdg_shell support\n");
+  return EXIT_FAILURE;
+}
+```
+
+and make sure that the remaining code in _client.c_ `main` isn't commented out.
+In other words, we've got the same `main` as before, but with this new null
+check.
+
+When we build and run now, we'll see our error message printed and the client
+will exit rather than crash. This informs us of our next step: how to get our
+server to support the xdg-shell protocol, which provides the `xdg_wm_base`
+interface.
+
 
 
 

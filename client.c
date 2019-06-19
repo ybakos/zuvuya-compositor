@@ -99,6 +99,10 @@ int main(int argc, char** argv) {
   }
 
   struct wl_surface* surface = wl_compositor_create_surface(compositor);
+  if (xdg_wm_base == NULL) {
+    fprintf(stderr, "no xdg_shell support\n");
+    return EXIT_FAILURE;
+  }
   struct xdg_surface* xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
   struct xdg_toplevel *xdg_toplevel= xdg_surface_get_toplevel(xdg_surface);
 
